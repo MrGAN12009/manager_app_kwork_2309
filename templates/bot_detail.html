@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}Бот {{ bot.name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3>{{ bot.name }}</h3>
+  <div>
+    <a class="btn btn-outline-light" href="{{ url_for('edit_bot', bot_id=bot.id) }}">Редактировать</a>
+  </div>
+</div>
+<div class="row g-3">
+  <div class="col-md-8">
+    <div class="card p-3">
+      <div>Статус: <span class="badge bg-{{ 'success' if runtime_status=='running' else 'secondary' }}">{{ runtime_status }}</span></div>
+      <div class="mt-2">Репозиторий: {{ bot.repo_url }} ({{ bot.branch }})</div>
+      <div class="mt-2">Рабочая папка: <code>{{ bot.workdir }}</code></div>
+      <div class="mt-2">Последний коммит: <code>{{ bot.last_commit or '-' }}</code></div>
+      <div class="mt-3">
+        <form class="d-inline" method="post" action="{{ url_for('start_bot', bot_id=bot.id) }}">
+          <button class="btn btn-success">Старт</button>
+        </form>
+        <form class="d-inline" method="post" action="{{ url_for('stop_bot', bot_id=bot.id) }}">
+          <button class="btn btn-danger">Стоп</button>
+        </form>
+        <form class="d-inline" method="post" action="{{ url_for('restart_bot', bot_id=bot.id) }}">
+          <button class="btn btn-warning">Перезапуск</button>
+        </form>
+        <a class="btn btn-outline-info" href="{{ url_for('view_logs', bot_id=bot.id) }}">Логи</a>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3">
+      <h5>Статистика</h5>
+      <div>Сообщений: {{ bot.stats.messages_count if bot.stats else 0 }}</div>
+      <div>Пользователей: {{ bot.stats.users_count if bot.stats else 0 }}</div>
+      <div>Активность: {{ bot.stats.last_activity_at or '-' }}</div>
+    </div>
+  </div>
+</div>
+{% endblock %}

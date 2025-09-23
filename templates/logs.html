@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}Логи {{ bot.name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3>Логи: {{ bot.name }}</h3>
+  <a class="btn btn-outline-light" href="{{ url_for('bot_detail', bot_id=bot.id) }}">Назад</a>
+</div>
+<div class="card p-3">
+  <pre style="max-height:70vh; overflow:auto;">{{ logs }}</pre>
+</div>
+{% endblock %}

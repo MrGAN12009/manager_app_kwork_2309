@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}{{ action }} бота{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="card p-4">
+      <h3 class="mb-3">{{ action }} бота</h3>
+      <form method="post">
+        {{ form.hidden_tag() }}
+        <div class="row g-3">
+          <div class="col-md-6">
+            {{ form.name.label(class_='form-label') }}
+            {{ form.name(class_='form-control', placeholder='название') }}
+          </div>
+          <div class="col-md-6">
+            {{ form.token.label(class_='form-label') }}
+            {{ form.token(class_='form-control', placeholder='Токен бота') }}
+          </div>
+          <div class="col-md-8">
+            {{ form.repo_url.label(class_='form-label') }}
+            {{ form.repo_url(class_='form-control', placeholder='https://github.com/...') }}
+          </div>
+          <div class="col-md-4">
+            {{ form.branch.label(class_='form-label') }}
+            {{ form.branch(class_='form-control', placeholder='master') }}
+          </div>
+          <div class="col-md-12">
+            {{ form.db_url.label(class_='form-label') }}
+            {{ form.db_url(class_='form-control', placeholder='postgresql://user:pass@host/dbname') }}
+          </div>
+          <div class="col-md-12">
+            {{ form.env_text.label(class_='form-label') }}
+            {{ form.env_text(class_='form-control', rows=8, placeholder='Ключ=Значение...') }}
+          </div>
+          <div class="col-md-12 form-check">
+            {{ form.enabled(class_='form-check-input') }}
+            {{ form.enabled.label(class_='form-check-label') }}
+          </div>
+        </div>
+        <div class="mt-3">
+          <button class="btn btn-primary" type="submit">{{ action }}</button>
+          <a class="btn btn-secondary" href="{{ url_for('dashboard') }}">Отмена</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
