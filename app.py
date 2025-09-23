@@ -15,7 +15,7 @@ from wtforms.validators import DataRequired
 from flask_wtf import FlaskForm
 
 from models import SessionLocal, init_db, User as UserModel, Bot as BotModel, BotStats
-from process_manager import start_bot_process, stop_bot_process, is_process_running, find_entrypoint, resolve_python_executable
+from process_manager import start_bot_process, stop_bot_process, is_process_running, find_entrypoint, resolve_python_executable, create_virtualenv
 from repo_manager import clone_or_open_repo
 from scheduler import start_scheduler
 
@@ -209,8 +209,7 @@ def create_app() -> Flask:
                 _update_progress(bot_id, steps[2][0], steps[2][1])
                 bot = get_bot(db)
                 venv_path = bot.venv_path or os.path.join(bot.workdir, ".venv")
-                python_exe = sys.executable
-                subprocess.check_call([python_exe, "-m", "venv", venv_path])
+                create_virtualenv(venv_path)
 
                 _update_progress(bot_id, steps[3][0], steps[3][1])
                 vpy = resolve_python_executable(venv_path)

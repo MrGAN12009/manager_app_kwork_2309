@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 import psutil
+from shutil import which
 
 
 def ensure_directory(path: str) -> None:
@@ -24,10 +25,40 @@ def find_entrypoint(workdir: str) -> str:
 def resolve_python_executable(venv_path: Optional[str]) -> str:
     python_exe = sys.executable
     if venv_path:
-        candidate = os.path.join(venv_path, "Scripts", "python.exe") if os.name == "nt" else os.path.join(venv_path, "bin", "python")
-        if os.path.exists(candidate):
-            python_exe = candidate
+        candidates = []
+        if os.name == "nt":
+            candidates.append(os.path.join(venv_path, "Scripts", "python.exe"))
+        else:
+            candidates.append(os.path.join(venv_path, "bin", "python"))
+            candidates.append(os.path.join(venv_path, "bin", "python3"))
+        for c in candidates:
+            if os.path.exists(c):
+                python_exe = c
+                break
     return python_exe
+
+
+def create_virtualenv(venv_path: str) -> None:
+    ensure_directory(venv_path)
+    # Try using current interpreter
+    try:
+        subprocess.check_call([sys.executable, "-m", "venv", venv_path])
+    except Exception:
+        # Try python3/python from PATH
+        for py in ("python3", "python"):
+            exe = which(py)
+            if not exe:
+                continue
+            try:
+                subprocess.check_call([exe, "-m", "venv", venv_path])
+                break
+            except Exception:
+                continue
+    # Fallback: virtualenv if available
+    if not os.path.exists(os.path.join(venv_path, "Scripts" if os.name == "nt" else "bin")):
+        venv_tool = which("virtualenv")
+        if venv_tool:
+            subprocess.check_call([venv_tool, venv_path])
 
 
 def start_bot_process(workdir: str, entrypoint: str = "main.py", venv_path: Optional[str] = None, log_path: Optional[str] = None) -> int:
