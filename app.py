@@ -62,6 +62,23 @@ def create_app() -> Flask:
     ensure_root_user()
     start_scheduler()
 
+    def _resolve_log_path(workdir: str, user_value: str | None) -> str:
+        default_path = os.path.join(workdir, "logs", "bot.out.log")
+        if not user_value:
+            return default_path
+        val = user_value.strip()
+        if not val:
+            return default_path
+        # Если начинается с '/' или '\\' — трактуем как путь ВНУТРИ рабочей папки
+        if val.startswith("/") or val.startswith("\\"):
+            inside = val.lstrip("/\\")
+            return os.path.join(workdir, inside)
+        # Абсолютные пути оставляем как есть (но рекомендуется хранить рядом с ботом)
+        if os.path.isabs(val):
+            return val
+        # Относительные пути — относительно рабочей папки бота
+        return os.path.join(workdir, val)
+
     class BotForm(FlaskForm):
         name = StringField("Название", validators=[DataRequired()])
         token = StringField("Token", validators=[DataRequired()])
@@ -139,7 +156,7 @@ def create_app() -> Flask:
                     status="setting_up",
                     process_pid=None,
                     last_commit=None,
-                    log_path=(form.log_path.data.strip() if (form.log_path.data and form.log_path.data.strip()) else os.path.join(log_dir, "bot.out.log")),
+                    log_path=_resolve_log_path(workdir, form.log_path.data if form.log_path.data else os.path.join("logs", "bot.out.log")),
                     venv_path=os.path.join(workdir, ".venv"),
                     setup_status="running",
                     setup_step=0,
@@ -424,8 +441,7 @@ def create_app() -> Flask:
                 bot.branch = form.branch.data or "master"
                 bot.env_text = form.env_text.data or ""
                 bot.db_url = form.db_url.data or None
-                new_log_path = (form.log_path.data.strip() if (form.log_path.data and form.log_path.data.strip()) else bot.log_path)
-                bot.log_path = new_log_path
+                bot.log_path = _resolve_log_path(bot.workdir, form.log_path.data if form.log_path.data else bot.log_path)
                 bot.enabled = form.enabled.data
                 db.commit()
 
