@@ -213,12 +213,21 @@ def create_app() -> Flask:
 
                 _update_progress(bot_id, steps[3][0], steps[3][1])
                 vpy = resolve_python_executable(venv_path)
-                subprocess.check_call([vpy, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"], cwd=bot.workdir)
+                try:
+                    subprocess.check_call([vpy, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"], cwd=bot.workdir)
+                except FileNotFoundError:
+                    # fallback to system python3
+                    vpy = resolve_python_executable(None)
+                    subprocess.check_call([vpy, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"], cwd=bot.workdir)
 
                 _update_progress(bot_id, steps[4][0], steps[4][1])
                 req_path = os.path.join(bot.workdir, "requirements.txt")
                 if os.path.exists(req_path):
-                    subprocess.check_call([vpy, "-m", "pip", "install", "-r", req_path], cwd=bot.workdir)
+                    try:
+                        subprocess.check_call([vpy, "-m", "pip", "install", "-r", req_path], cwd=bot.workdir)
+                    except FileNotFoundError:
+                        vpy = resolve_python_executable(None)
+                        subprocess.check_call([vpy, "-m", "pip", "install", "-r", req_path], cwd=bot.workdir)
 
                 _update_progress(bot_id, steps[5][0], steps[5][1])
                 entrypoint = find_entrypoint(bot.workdir)

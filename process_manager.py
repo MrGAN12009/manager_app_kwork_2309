@@ -22,43 +22,56 @@ def find_entrypoint(workdir: str) -> str:
     return "main.py"
 
 
+def _venv_bin_dir(venv_path: str) -> str:
+    return os.path.join(venv_path, "Scripts" if os.name == "nt" else "bin")
+
+
 def resolve_python_executable(venv_path: Optional[str]) -> str:
-    python_exe = sys.executable
+    # Default to venv python if exists, else fallback to system python3/python
+    candidates = []
     if venv_path:
-        candidates = []
         if os.name == "nt":
             candidates.append(os.path.join(venv_path, "Scripts", "python.exe"))
         else:
             candidates.append(os.path.join(venv_path, "bin", "python"))
             candidates.append(os.path.join(venv_path, "bin", "python3"))
-        for c in candidates:
-            if os.path.exists(c):
-                python_exe = c
-                break
-    return python_exe
+    # system fallbacks
+    for sys_py in (which("python3"), which("python"), sys.executable):
+        if sys_py:
+            candidates.append(sys_py)
+    for c in candidates:
+        if c and os.path.exists(c):
+            return c
+    return sys.executable
 
 
 def create_virtualenv(venv_path: str) -> None:
     ensure_directory(venv_path)
-    # Try using current interpreter
-    try:
-        subprocess.check_call([sys.executable, "-m", "venv", venv_path])
-    except Exception:
-        # Try python3/python from PATH
-        for py in ("python3", "python"):
-            exe = which(py)
-            if not exe:
-                continue
-            try:
-                subprocess.check_call([exe, "-m", "venv", venv_path])
-                break
-            except Exception:
-                continue
-    # Fallback: virtualenv if available
-    if not os.path.exists(os.path.join(venv_path, "Scripts" if os.name == "nt" else "bin")):
+    created = False
+    errors = []
+    # Prefer python3 on Linux/Ubuntu
+    for py_cmd in ([which("python3")] if os.name != "nt" else []) + [sys.executable, which("python")]:
+        if not py_cmd:
+            continue
+        try:
+            subprocess.check_call([py_cmd, "-m", "venv", venv_path])
+            created = True
+            break
+        except Exception as e:
+            errors.append(f"{py_cmd}: {e}")
+            continue
+    if not created:
         venv_tool = which("virtualenv")
         if venv_tool:
-            subprocess.check_call([venv_tool, venv_path])
+            try:
+                subprocess.check_call([venv_tool, venv_path])
+                created = True
+            except Exception as e:
+                errors.append(f"virtualenv: {e}")
+    # verify
+    bin_dir = _venv_bin_dir(venv_path)
+    if not (os.path.isdir(bin_dir) and (os.path.exists(os.path.join(bin_dir, "python")) or os.path.exists(os.path.join(bin_dir, "python3")) or os.path.exists(os.path.join(bin_dir, "python.exe")))):
+        raise RuntimeError("Не удалось создать виртуальное окружение. Убедитесь, что установлен пакет python3-venv (sudo apt install -y python3-venv). Details: " + "; ".join(errors))
 
 
 def start_bot_process(workdir: str, entrypoint: str = "main.py", venv_path: Optional[str] = None, log_path: Optional[str] = None) -> int:
