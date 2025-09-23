@@ -8,7 +8,7 @@ import requests
 
 ALERT_BOT_TOKEN = os.getenv("ALERT_BOT_TOKEN", "8257306953:AAFBvnVVi7GNlUt9h77La_tAvuoMkZy05xQ")
 ALERT_CHAT_ID = int(os.getenv("ALERT_CHAT_ID", "630043071"))
-
+#
 _error_regex = re.compile(r"\\b(error|exception|traceback)\\b", re.IGNORECASE)
 
 # In-memory offsets for last read position per log file
