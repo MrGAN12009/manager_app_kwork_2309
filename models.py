@@ -43,7 +43,7 @@ class Bot(Base):
     db_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
 
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    status: Mapped[str] = mapped_column(String(32), default="stopped")  # running/stopped/errored
+    status: Mapped[str] = mapped_column(String(32), default="stopped")  # running/stopped/errored/setting_up
     process_pid: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     last_commit: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
@@ -51,6 +51,12 @@ class Bot(Base):
     last_stopped_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     log_path: Mapped[str] = mapped_column(String(1024), default="")
+    venv_path: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+
+    setup_status: Mapped[str] = mapped_column(String(32), default="pending")  # pending/running/done/failed
+    setup_step: Mapped[int] = mapped_column(Integer, default=0)
+    setup_total: Mapped[int] = mapped_column(Integer, default=0)
+    setup_message: Mapped[str] = mapped_column(String(512), default="")
 
     stats: Mapped["BotStats"] = relationship("BotStats", back_populates="bot", uselist=False, cascade="all, delete-orphan")
 

@@ -21,6 +21,15 @@ def find_entrypoint(workdir: str) -> str:
     return "main.py"
 
 
+def resolve_python_executable(venv_path: Optional[str]) -> str:
+    python_exe = sys.executable
+    if venv_path:
+        candidate = os.path.join(venv_path, "Scripts", "python.exe") if os.name == "nt" else os.path.join(venv_path, "bin", "python")
+        if os.path.exists(candidate):
+            python_exe = candidate
+    return python_exe
+
+
 def start_bot_process(workdir: str, entrypoint: str = "main.py", venv_path: Optional[str] = None, log_path: Optional[str] = None) -> int:
     ensure_directory(workdir)
     if log_path:
@@ -28,11 +37,7 @@ def start_bot_process(workdir: str, entrypoint: str = "main.py", venv_path: Opti
     stdout_log = open(log_path or os.path.join(workdir, "logs", "bot.out.log"), "a", buffering=1, encoding="utf-8")
     stderr_log = open((log_path or os.path.join(workdir, "logs", "bot.err.log")).replace(".out.", ".err."), "a", buffering=1, encoding="utf-8")
 
-    python_exe = sys.executable
-    if venv_path:
-        candidate = os.path.join(venv_path, "Scripts", "python.exe") if os.name == "nt" else os.path.join(venv_path, "bin", "python")
-        if os.path.exists(candidate):
-            python_exe = candidate
+    python_exe = resolve_python_executable(venv_path)
 
     creationflags = 0
     if os.name == "nt":
