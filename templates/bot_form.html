@@ -29,6 +29,11 @@
             {{ form.db_url(class_='form-control', placeholder='postgresql://user:pass@host/dbname') }}
           </div>
           <div class="col-md-12">
+            {{ form.log_path.label(class_='form-label') }}
+            {{ form.log_path(class_='form-control', placeholder='C:/path/to/bot.out.log или /var/log/bot/bot.out.log') }}
+            <div class="form-text">По умолчанию: bots/&lt;name&gt;/logs/bot.out.log</div>
+          </div>
+          <div class="col-md-12">
             {{ form.env_text.label(class_='form-label') }}
             {{ form.env_text(class_='form-control', rows=8, placeholder='Ключ=Значение...') }}
           </div>

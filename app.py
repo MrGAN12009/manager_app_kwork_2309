@@ -69,6 +69,7 @@ def create_app() -> Flask:
         branch = StringField("Branch", default="master")
         env_text = TextAreaField(".env content")
         db_url = StringField("DB URL (optional)")
+        log_path = StringField("Log file path (optional)")
         enabled = BooleanField("Enabled", default=True)
 
     @app.route("/login", methods=["GET", "POST"])
@@ -138,7 +139,7 @@ def create_app() -> Flask:
                     status="setting_up",
                     process_pid=None,
                     last_commit=None,
-                    log_path=os.path.join(log_dir, "bot.out.log"),
+                    log_path=(form.log_path.data.strip() if (form.log_path.data and form.log_path.data.strip()) else os.path.join(log_dir, "bot.out.log")),
                     venv_path=os.path.join(workdir, ".venv"),
                     setup_status="running",
                     setup_step=0,
@@ -344,6 +345,150 @@ def create_app() -> Flask:
                 return redirect(url_for("dashboard"))
             runtime_status = "running" if is_process_running(bot.process_pid) else "stopped"
             return render_template("bot_detail.html", bot=bot, runtime_status=runtime_status)
+        finally:
+            db.close()
+
+    @app.route("/bots/<int:bot_id>/stop", methods=["POST"])
+    @login_required
+    def stop_bot(bot_id: int):
+        db = SessionLocal()
+        try:
+            bot = db.get(BotModel, bot_id)
+            if not bot:
+                flash("Бот не найден", "warning")
+                return redirect(url_for("dashboard"))
+            if bot.process_pid:
+                stop_bot_process(bot.process_pid)
+            bot.process_pid = None
+            bot.status = "stopped"
+            bot.last_stopped_at = datetime.utcnow()
+            db.commit()
+            flash("Остановлен", "success")
+            return redirect(url_for("bot_detail", bot_id=bot.id))
+        finally:
+            db.close()
+
+    @app.route("/bots/<int:bot_id>/logs")
+    @login_required
+    def view_logs(bot_id: int):
+        db = SessionLocal()
+        try:
+            bot = db.get(BotModel, bot_id)
+            if not bot:
+                flash("Бот не найден", "warning")
+                return redirect(url_for("dashboard"))
+            log_file = bot.log_path or os.path.join(bot.workdir, "logs", "bot.out.log")
+            logs = ""
+            try:
+                if os.path.exists(log_file):
+                    # read last ~200 KB
+                    with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+                        f.seek(0, os.SEEK_END)
+                        size = f.tell()
+                        f.seek(max(size - 200_000, 0))
+                        logs = f.read()
+                else:
+                    logs = f"Файл логов не найден: {log_file}"
+            except Exception as e:
+                logs = f"Не удалось прочитать логи: {e}"
+            return render_template("logs.html", bot=bot, logs=logs)
+        finally:
+            db.close()
+
+    @app.route("/bots/<int:bot_id>/edit", methods=["GET", "POST"])
+    @login_required
+    def edit_bot(bot_id: int):
+        db = SessionLocal()
+        try:
+            bot = db.get(BotModel, bot_id)
+            if not bot:
+                flash("Бот не найден", "warning")
+                return redirect(url_for("dashboard"))
+            form = BotForm()
+            if request.method == "GET":
+                form.name.data = bot.name
+                form.token.data = bot.token
+                form.repo_url.data = bot.repo_url
+                form.branch.data = bot.branch
+                form.env_text.data = bot.env_text or ""
+                form.db_url.data = bot.db_url or ""
+                form.log_path.data = bot.log_path or ""
+                form.enabled.data = bot.enabled
+                return render_template("bot_form.html", form=form, action="Сохранить")
+            # POST
+            if form.validate_on_submit():
+                changed_env_or_token = (bot.token != form.token.data) or ((bot.env_text or "") != (form.env_text.data or ""))
+                bot.name = form.name.data
+                bot.token = form.token.data
+                bot.repo_url = form.repo_url.data
+                bot.branch = form.branch.data or "master"
+                bot.env_text = form.env_text.data or ""
+                bot.db_url = form.db_url.data or None
+                new_log_path = (form.log_path.data.strip() if (form.log_path.data and form.log_path.data.strip()) else bot.log_path)
+                bot.log_path = new_log_path
+                bot.enabled = form.enabled.data
+                db.commit()
+
+                # rewrite .env
+                env_path = os.path.join(bot.workdir, ".env")
+                full_env = bot.env_text or ""
+                if "BOT_TOKEN" not in full_env:
+                    full_env += ("\n" if full_env else "") + f"BOT_TOKEN={bot.token}"
+                if bot.db_url:
+                    if "DATABASE_URL" not in full_env:
+                        full_env += f"\nDATABASE_URL={bot.db_url}"
+                try:
+                    Path(bot.workdir).mkdir(parents=True, exist_ok=True)
+                    with open(env_path, "w", encoding="utf-8") as f:
+                        f.write(full_env)
+                except Exception as e:
+                    flash(f"Не удалось сохранить .env: {e}", "danger")
+
+                # restart if env/token changed
+                if changed_env_or_token:
+                    try:
+                        if bot.process_pid:
+                            stop_bot_process(bot.process_pid)
+                        entrypoint = find_entrypoint(bot.workdir)
+                        pid = start_bot_process(bot.workdir, entrypoint=entrypoint, venv_path=bot.venv_path, log_path=bot.log_path)
+                        bot.process_pid = pid
+                        bot.status = "running"
+                        bot.last_started_at = datetime.utcnow()
+                        db.commit()
+                        flash("Сохранено и перезапущено", "success")
+                    except Exception as e:
+                        flash(f"Сохранено, но перезапуск не удался: {e}", "warning")
+                else:
+                    flash("Сохранено", "success")
+                return redirect(url_for("bot_detail", bot_id=bot.id))
+            else:
+                flash("Проверьте форму", "warning")
+                return render_template("bot_form.html", form=form, action="Сохранить")
+        finally:
+            db.close()
+
+    # Simple stats ingestion endpoint for bots
+    @app.route("/api/bots/<int:bot_id>/stats/increment", methods=["POST"])
+    def api_stats_increment(bot_id: int):
+        db = SessionLocal()
+        try:
+            bot = db.get(BotModel, bot_id)
+            if not bot:
+                return jsonify({"error": "not_found"}), 404
+            # optional lightweight auth via token
+            req_token = request.headers.get("X-Bot-Token") or request.args.get("token")
+            if req_token and req_token != bot.token:
+                return jsonify({"error": "unauthorized"}), 401
+            data = request.get_json(silent=True) or {}
+            inc_messages = int(data.get("messages", 0) or 0)
+            inc_users = int(data.get("users", 0) or 0)
+            if not bot.stats:
+                bot.stats = BotStats(bot_id=bot.id)
+            bot.stats.messages_count = (bot.stats.messages_count or 0) + inc_messages
+            bot.stats.users_count = max((bot.stats.users_count or 0), inc_users) if data.get("users_is_total") else (bot.stats.users_count or 0) + inc_users
+            bot.stats.last_activity_at = datetime.utcnow()
+            db.commit()
+            return jsonify({"ok": True, "messages": bot.stats.messages_count, "users": bot.stats.users_count})
         finally:
             db.close()
 
