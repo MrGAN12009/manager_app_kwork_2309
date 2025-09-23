@@ -4,7 +4,11 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3>{{ bot.name }}</h3>
   <div>
+    {% if has_endpoint('edit_bot') %}
     <a class="btn btn-outline-light" href="{{ url_for('edit_bot', bot_id=bot.id) }}">Редактировать</a>
+    {% else %}
+    <a class="btn btn-outline-light" href="{{ url_for('dashboard') }}">К списку</a>
+    {% endif %}
   </div>
 </div>
 <div class="row g-3">
@@ -15,16 +19,16 @@
       <div class="mt-2">Рабочая папка: <code>{{ bot.workdir }}</code></div>
       <div class="mt-2">Последний коммит: <code>{{ bot.last_commit or '-' }}</code></div>
       <div class="mt-3">
-        <form class="d-inline" method="post" action="{{ url_for('start_bot', bot_id=bot.id) }}">
+        <form class="d-inline" method="post" action="{% if has_endpoint('start_bot') %}{{ url_for('start_bot', bot_id=bot.id) }}{% else %}#{% endif %}">
           <button class="btn btn-success">Старт</button>
         </form>
-        <form class="d-inline" method="post" action="{{ url_for('stop_bot', bot_id=bot.id) }}">
+        <form class="d-inline" method="post" action="{% if has_endpoint('stop_bot') %}{{ url_for('stop_bot', bot_id=bot.id) }}{% else %}#{% endif %}">
           <button class="btn btn-danger">Стоп</button>
         </form>
-        <form class="d-inline" method="post" action="{{ url_for('restart_bot', bot_id=bot.id) }}">
+        <form class="d-inline" method="post" action="{% if has_endpoint('restart_bot') %}{{ url_for('restart_bot', bot_id=bot.id) }}{% else %}#{% endif %}">
           <button class="btn btn-warning">Перезапуск</button>
         </form>
-        <a class="btn btn-outline-info" href="{{ url_for('view_logs', bot_id=bot.id) }}">Логи</a>
+        <a class="btn btn-outline-info" href="{% if has_endpoint('view_logs') %}{{ url_for('view_logs', bot_id=bot.id) }}{% else %}#{% endif %}">Логи</a>
       </div>
     </div>
   </div>

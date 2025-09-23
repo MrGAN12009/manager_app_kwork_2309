@@ -182,20 +182,21 @@ def create_app() -> Flask:
             (9, "Готово"),
             (10, "Завершено"),
         ]
+        def get_bot(db):
+            return db.get(BotModel, bot_id)
         db = SessionLocal()
         try:
-            bot = db.get(BotModel, bot_id)
+            bot = get_bot(db)
             if not bot:
                 return
             try:
-                # 1. Clone
                 _update_progress(bot_id, steps[0][0], steps[0][1])
                 repo = clone_or_open_repo(bot.repo_url, bot.workdir, branch=bot.branch)
                 bot.last_commit = repo.head.commit.hexsha if repo.head.is_valid() else None
                 db.commit()
 
-                # 2. .env
                 _update_progress(bot_id, steps[1][0], steps[1][1])
+                bot = get_bot(db)
                 env_path = os.path.join(bot.workdir, ".env")
                 full_env = bot.env_text or ""
                 if "BOT_TOKEN" not in full_env:
@@ -205,44 +206,42 @@ def create_app() -> Flask:
                 with open(env_path, "w", encoding="utf-8") as f:
                     f.write(full_env)
 
-                # 3. venv
                 _update_progress(bot_id, steps[2][0], steps[2][1])
+                bot = get_bot(db)
                 venv_path = bot.venv_path or os.path.join(bot.workdir, ".venv")
                 python_exe = sys.executable
                 subprocess.check_call([python_exe, "-m", "venv", venv_path])
 
-                # 4. pip upgrade
                 _update_progress(bot_id, steps[3][0], steps[3][1])
                 vpy = resolve_python_executable(venv_path)
                 subprocess.check_call([vpy, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"], cwd=bot.workdir)
 
-                # 5. install requirements if present
                 _update_progress(bot_id, steps[4][0], steps[4][1])
                 req_path = os.path.join(bot.workdir, "requirements.txt")
                 if os.path.exists(req_path):
                     subprocess.check_call([vpy, "-m", "pip", "install", "-r", req_path], cwd=bot.workdir)
 
-                # 6. entrypoint
                 _update_progress(bot_id, steps[5][0], steps[5][1])
                 entrypoint = find_entrypoint(bot.workdir)
 
-                # 7. save
                 _update_progress(bot_id, steps[6][0], steps[6][1])
+                bot = get_bot(db)
                 bot.venv_path = venv_path
                 db.commit()
 
-                # 8-10 finalize
                 _update_progress(bot_id, steps[7][0], steps[7][1])
                 _update_progress(bot_id, steps[8][0], steps[8][1])
                 _update_progress(bot_id, steps[9][0], steps[9][1], status="done")
 
-                # set status
+                bot = get_bot(db)
                 bot.status = "stopped"
                 db.commit()
             except Exception as e:
                 _update_progress(bot_id, 10, f"Ошибка: {e}", status="failed")
-                bot.status = "errored"
-                db.commit()
+                bot = get_bot(db)
+                if bot:
+                    bot.status = "errored"
+                    db.commit()
         finally:
             db.close()
 

@@ -16,7 +16,7 @@ def get_database_url() -> str:
 
 
 engine = create_engine(get_database_url(), echo=False, future=True)
-SessionLocal = scoped_session(sessionmaker(bind=engine, autocommit=False, autoflush=False))
+SessionLocal = scoped_session(sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False))
 
 
 class User(Base):
