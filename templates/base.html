@@ -20,7 +20,7 @@
       <div class="container-fluid">
         <a class="navbar-brand" href="/">Bot Manager</a>
         <div class="d-flex">
-          {% if current_user.is_authenticated %}
+          {% if current_user.is_authenticated and has_endpoint('logout') %}
           <span class="navbar-text me-3">{{ current_user.username }}</span>
           <a class="btn btn-sm btn-outline-light" href="{{ url_for('logout') }}">Выйти</a>
           {% endif %}

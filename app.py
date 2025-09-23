@@ -51,6 +51,13 @@ def create_app() -> Flask:
         finally:
             db.close()
 
+    # expose helper to check endpoint existence in templates
+    @app.context_processor
+    def inject_has_endpoint():
+        def has_endpoint(name: str) -> bool:
+            return name in app.view_functions
+        return dict(has_endpoint=has_endpoint)
+
     ensure_root_user()
     start_scheduler()
 
@@ -78,6 +85,12 @@ def create_app() -> Flask:
             finally:
                 db.close()
         return render_template("login.html")
+
+    @app.route("/logout")
+    @login_required
+    def logout():
+        logout_user()
+        return redirect(url_for("login"))
 
     @app.route("/")
     @login_required
