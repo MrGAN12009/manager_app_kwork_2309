@@ -4,6 +4,7 @@ import secrets
 import subprocess
 import sys
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -213,21 +214,21 @@ def create_app() -> Flask:
 
                 _update_progress(bot_id, steps[3][0], steps[3][1])
                 vpy = resolve_python_executable(venv_path)
-                try:
-                    subprocess.check_call([vpy, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"], cwd=bot.workdir)
-                except FileNotFoundError:
-                    # fallback to system python3
-                    vpy = resolve_python_executable(None)
-                    subprocess.check_call([vpy, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"], cwd=bot.workdir)
+                if venv_path and (venv_path not in vpy):
+                    raise RuntimeError("Python из venv не найден. Установите python3-venv: sudo apt install -y python3-venv")
+                subprocess.check_call([vpy, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"], cwd=None)
 
                 _update_progress(bot_id, steps[4][0], steps[4][1])
                 req_path = os.path.join(bot.workdir, "requirements.txt")
-                if os.path.exists(req_path):
-                    try:
-                        subprocess.check_call([vpy, "-m", "pip", "install", "-r", req_path], cwd=bot.workdir)
-                    except FileNotFoundError:
-                        vpy = resolve_python_executable(None)
-                        subprocess.check_call([vpy, "-m", "pip", "install", "-r", req_path], cwd=bot.workdir)
+                abs_req = os.path.abspath(req_path)
+                # retry a few times if FS not yet synced
+                attempts = 0
+                while attempts < 5 and not os.path.exists(abs_req):
+                    time.sleep(0.4)
+                    attempts += 1
+                if os.path.exists(abs_req):
+                    subprocess.check_call([vpy, "-m", "pip", "install", "-r", abs_req], cwd=None)
+                # if no requirements.txt, skip silently
 
                 _update_progress(bot_id, steps[5][0], steps[5][1])
                 entrypoint = find_entrypoint(bot.workdir)
