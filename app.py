@@ -120,7 +120,7 @@ def create_app() -> Flask:
                 db_url = form.db_url.data or None
                 enabled = form.enabled.data
 
-                workdir = os.path.join("bots", name)
+                workdir = os.path.abspath(os.path.join("bots", name))
                 Path(workdir).mkdir(parents=True, exist_ok=True)
 
                 log_dir = os.path.join(workdir, "logs")
@@ -210,6 +210,7 @@ def create_app() -> Flask:
                 _update_progress(bot_id, steps[2][0], steps[2][1])
                 bot = get_bot(db)
                 venv_path = bot.venv_path or os.path.join(bot.workdir, ".venv")
+                venv_path = os.path.abspath(venv_path)
                 create_virtualenv(venv_path)
 
                 _update_progress(bot_id, steps[3][0], steps[3][1])

@@ -22,12 +22,15 @@ def find_entrypoint(workdir: str) -> str:
     return "main.py"
 
 
+def _to_abs(path: str) -> str:
+    return os.path.abspath(path)
+
+
 def _venv_bin_dir(venv_path: str) -> str:
     return os.path.join(venv_path, "Scripts" if os.name == "nt" else "bin")
 
 
 def resolve_python_executable(venv_path: Optional[str]) -> str:
-    # Default to venv python if exists, else fallback to system python3/python
     candidates = []
     if venv_path:
         if os.name == "nt":
@@ -35,21 +38,22 @@ def resolve_python_executable(venv_path: Optional[str]) -> str:
         else:
             candidates.append(os.path.join(venv_path, "bin", "python"))
             candidates.append(os.path.join(venv_path, "bin", "python3"))
-    # system fallbacks
     for sys_py in (which("python3"), which("python"), sys.executable):
         if sys_py:
             candidates.append(sys_py)
     for c in candidates:
-        if c and os.path.exists(c):
-            return c
-    return sys.executable
+        if not c:
+            continue
+        c_abs = _to_abs(c)
+        if os.path.exists(c_abs):
+            return c_abs
+    return _to_abs(sys.executable)
 
 
 def create_virtualenv(venv_path: str) -> None:
     ensure_directory(venv_path)
     created = False
     errors = []
-    # Prefer python3 on Linux/Ubuntu
     for py_cmd in ([which("python3")] if os.name != "nt" else []) + [sys.executable, which("python")]:
         if not py_cmd:
             continue
@@ -68,10 +72,9 @@ def create_virtualenv(venv_path: str) -> None:
                 created = True
             except Exception as e:
                 errors.append(f"virtualenv: {e}")
-    # verify
     bin_dir = _venv_bin_dir(venv_path)
     if not (os.path.isdir(bin_dir) and (os.path.exists(os.path.join(bin_dir, "python")) or os.path.exists(os.path.join(bin_dir, "python3")) or os.path.exists(os.path.join(bin_dir, "python.exe")))):
-        raise RuntimeError("Не удалось создать виртуальное окружение. Убедитесь, что установлен пакет python3-venv (sudo apt install -y python3-venv). Details: " + "; ".join(errors))
+        raise RuntimeError("Не удалось создать виртуальное окружение. Установите python3-venv: sudo apt install -y python3-venv. Details: " + "; ".join(errors))
 
 
 def start_bot_process(workdir: str, entrypoint: str = "main.py", venv_path: Optional[str] = None, log_path: Optional[str] = None) -> int:
@@ -82,6 +85,10 @@ def start_bot_process(workdir: str, entrypoint: str = "main.py", venv_path: Opti
     stderr_log = open((log_path or os.path.join(workdir, "logs", "bot.err.log")).replace(".out.", ".err."), "a", buffering=1, encoding="utf-8")
 
     python_exe = resolve_python_executable(venv_path)
+    if not os.path.exists(python_exe):
+        # fallback to system python3
+        sys_py = which("python3") or which("python") or sys.executable
+        python_exe = _to_abs(sys_py)
 
     creationflags = 0
     if os.name == "nt":
