@@ -324,6 +324,20 @@ def create_app() -> Flask:
         finally:
             db.close()
 
+    @app.route("/bots/<int:bot_id>")
+    @login_required
+    def bot_detail(bot_id: int):
+        db = SessionLocal()
+        try:
+            bot = db.get(BotModel, bot_id)
+            if not bot:
+                flash("Бот не найден", "warning")
+                return redirect(url_for("dashboard"))
+            runtime_status = "running" if is_process_running(bot.process_pid) else "stopped"
+            return render_template("bot_detail.html", bot=bot, runtime_status=runtime_status)
+        finally:
+            db.close()
+
     return app
 
 

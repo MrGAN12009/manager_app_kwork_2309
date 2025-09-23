@@ -17,7 +17,7 @@ def start_scheduler():
     global scheduler
     if scheduler is not None and scheduler.running:
         return scheduler
-    scheduler = BackgroundScheduler()  # server local time
+    scheduler = BackgroundScheduler()
     scheduler.add_job(daily_update_job, "cron", hour=0, minute=0, id="daily_update")
     scheduler.add_job(log_scan_job, "interval", minutes=1, id="log_scan")
     scheduler.start()
@@ -38,7 +38,7 @@ def daily_update_job():
                         if bot.process_pid and is_process_running(bot.process_pid):
                             stop_bot_process(bot.process_pid)
                         entrypoint = find_entrypoint(bot.workdir)
-                        pid = start_bot_process(bot.workdir, entrypoint=entrypoint, venv_path=None, log_path=bot.log_path)
+                        pid = start_bot_process(bot.workdir, entrypoint=entrypoint, venv_path=bot.venv_path, log_path=bot.log_path)
                         bot.process_pid = pid
                 db.commit()
             except Exception:
