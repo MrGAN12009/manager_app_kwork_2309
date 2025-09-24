@@ -222,6 +222,12 @@ def create_app() -> Flask:
                     full_env += ("\n" if full_env else "") + f"BOT_TOKEN={bot.token}"
                 if bot.db_url:
                     full_env += f"\nDATABASE_URL={bot.db_url}"
+                # manager connectivity for stats ingestion
+                manager_url = os.getenv("MANAGER_PUBLIC_URL", "http://localhost:5000")
+                if "MANAGER_URL" not in full_env:
+                    full_env += f"\nMANAGER_URL={manager_url}"
+                if "BOT_ID" not in full_env:
+                    full_env += f"\nBOT_ID={bot.id}"
                 with open(env_path, "w", encoding="utf-8") as f:
                     f.write(full_env)
 
@@ -532,6 +538,11 @@ def create_app() -> Flask:
                 if bot.db_url:
                     if "DATABASE_URL" not in full_env:
                         full_env += f"\nDATABASE_URL={bot.db_url}"
+                manager_url = os.getenv("MANAGER_PUBLIC_URL", "http://localhost:5000")
+                if "MANAGER_URL" not in full_env:
+                    full_env += f"\nMANAGER_URL={manager_url}"
+                if "BOT_ID" not in full_env:
+                    full_env += f"\nBOT_ID={bot.id}"
                 try:
                     Path(bot.workdir).mkdir(parents=True, exist_ok=True)
                     with open(env_path, "w", encoding="utf-8") as f:
