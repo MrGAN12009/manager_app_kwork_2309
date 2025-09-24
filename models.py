@@ -74,5 +74,17 @@ class BotStats(Base):
     bot: Mapped[Bot] = relationship("Bot", back_populates="stats")
 
 
+class BotMessage(Base):
+    __tablename__ = "bot_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bot_id: Mapped[int] = mapped_column(ForeignKey("bots.id"), index=True, nullable=False)
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
+    chat_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
+    message_type: Mapped[str] = mapped_column(String(32), default="text")
+    text: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)

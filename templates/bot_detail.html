@@ -28,6 +28,9 @@
         <form class="d-inline" method="post" action="{% if has_endpoint('restart_bot') %}{{ url_for('restart_bot', bot_id=bot.id) }}{% else %}#{% endif %}">
           <button class="btn btn-warning">Перезапуск</button>
         </form>
+        <form class="d-inline" method="post" action="{% if has_endpoint('update_repo') %}{{ url_for('update_repo', bot_id=bot.id) }}{% else %}#{% endif %}">
+          <button class="btn btn-outline-primary">Обновить из Git</button>
+        </form>
         <a class="btn btn-outline-info" href="{% if has_endpoint('view_logs') %}{{ url_for('view_logs', bot_id=bot.id) }}{% else %}#{% endif %}">Логи</a>
       </div>
     </div>
@@ -35,9 +38,30 @@
   <div class="col-md-4">
     <div class="card p-3">
       <h5>Статистика</h5>
-      <div>Сообщений: {{ bot.stats.messages_count if bot.stats else 0 }}</div>
-      <div>Пользователей: {{ bot.stats.users_count if bot.stats else 0 }}</div>
-      <div>Активность: {{ bot.stats.last_activity_at or '-' }}</div>
+      <form class="mb-2" method="get" action="{{ url_for('bot_detail', bot_id=bot.id) }}">
+        <div class="btn-group mb-2" role="group">
+          <a class="btn btn-sm btn-{{ 'secondary' if computed_stats and computed_stats.period!='day' else 'primary' }}" href="{{ url_for('bot_detail', bot_id=bot.id, period='day') }}">День</a>
+          <a class="btn btn-sm btn-{{ 'secondary' if computed_stats and computed_stats.period!='week' else 'primary' }}" href="{{ url_for('bot_detail', bot_id=bot.id, period='week') }}">Неделя</a>
+          <a class="btn btn-sm btn-{{ 'secondary' if computed_stats and computed_stats.period!='month' else 'primary' }}" href="{{ url_for('bot_detail', bot_id=bot.id, period='month') }}">Месяц</a>
+          <a class="btn btn-sm btn-{{ 'secondary' if computed_stats and computed_stats.period!='all' else 'primary' }}" href="{{ url_for('bot_detail', bot_id=bot.id, period='all') }}">Всё</a>
+        </div>
+        <div class="row g-2 align-items-end">
+          <div class="col-6">
+            <label class="form-label small">C</label>
+            <input type="datetime-local" class="form-control form-control-sm" name="start" value="{{ computed_stats.start if computed_stats else ''|replace(' ', 'T') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">По</label>
+            <input type="datetime-local" class="form-control form-control-sm" name="end" value="{{ computed_stats.end if computed_stats else ''|replace(' ', 'T') }}">
+          </div>
+          <div class="col-12 mt-2">
+            <button class="btn btn-sm btn-outline-light">Применить</button>
+          </div>
+        </div>
+      </form>
+      <div>Сообщений: {{ (computed_stats.messages if computed_stats else (bot.stats.messages_count if bot.stats else 0)) }}</div>
+      <div>Пользователей: {{ (computed_stats.users if computed_stats else (bot.stats.users_count if bot.stats else 0)) }}</div>
+      <div>Активность: {{ (computed_stats.last_activity if computed_stats else (bot.stats.last_activity_at if bot.stats else None)) or '-' }}</div>
     </div>
   </div>
 </div>

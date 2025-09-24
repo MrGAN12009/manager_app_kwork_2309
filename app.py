@@ -15,7 +15,7 @@ from wtforms import StringField, TextAreaField, BooleanField
 from wtforms.validators import DataRequired
 from flask_wtf import FlaskForm
 
-from models import SessionLocal, init_db, User as UserModel, Bot as BotModel, BotStats
+from models import SessionLocal, init_db, User as UserModel, Bot as BotModel, BotStats, BotMessage
 from process_manager import start_bot_process, stop_bot_process, is_process_running, find_entrypoint, resolve_python_executable, create_virtualenv
 from repo_manager import clone_or_open_repo
 from scheduler import start_scheduler
@@ -323,6 +323,10 @@ def create_app() -> Flask:
             bot.process_pid = pid
             bot.status = "running"
             bot.last_started_at = datetime.utcnow()
+            # update activity field for display
+            if not bot.stats:
+                bot.stats = BotStats(bot_id=bot.id)
+            bot.stats.last_activity_at = bot.last_started_at
             db.commit()
             flash("Бот запущен", "success")
             return redirect(url_for("bot_detail", bot_id=bot.id))
@@ -345,6 +349,9 @@ def create_app() -> Flask:
             bot.process_pid = pid
             bot.status = "running"
             bot.last_started_at = datetime.utcnow()
+            if not bot.stats:
+                bot.stats = BotStats(bot_id=bot.id)
+            bot.stats.last_activity_at = bot.last_started_at
             db.commit()
             flash("Перезапущен", "success")
             return redirect(url_for("bot_detail", bot_id=bot.id))
@@ -361,7 +368,62 @@ def create_app() -> Flask:
                 flash("Бот не найден", "warning")
                 return redirect(url_for("dashboard"))
             runtime_status = "running" if is_process_running(bot.process_pid) else "stopped"
-            return render_template("bot_detail.html", bot=bot, runtime_status=runtime_status)
+
+            # Stats period filtering
+            period = (request.args.get("period") or "all").lower()
+            start_date_str = request.args.get("start")
+            end_date_str = request.args.get("end")
+
+            from datetime import datetime, timedelta
+            now = datetime.utcnow()
+            start_dt = None
+            end_dt = None
+            if start_date_str:
+                try:
+                    start_dt = datetime.fromisoformat(start_date_str)
+                except Exception:
+                    start_dt = None
+            if end_date_str:
+                try:
+                    end_dt = datetime.fromisoformat(end_date_str)
+                except Exception:
+                    end_dt = None
+            if not start_dt and not end_dt:
+                if period == "day":
+                    start_dt = now - timedelta(days=1)
+                elif period == "week":
+                    start_dt = now - timedelta(weeks=1)
+                elif period == "month":
+                    start_dt = now - timedelta(days=30)
+                else:
+                    start_dt = None
+
+            q = db.query(BotMessage).filter(BotMessage.bot_id == bot.id)
+            if start_dt:
+                q = q.filter(BotMessage.created_at >= start_dt)
+            if end_dt:
+                q = q.filter(BotMessage.created_at <= end_dt)
+
+            # Compute metrics
+            messages_count = q.count()
+            users_count = db.query(BotMessage.user_id).filter(BotMessage.bot_id == bot.id)
+            if start_dt:
+                users_count = users_count.filter(BotMessage.created_at >= start_dt)
+            if end_dt:
+                users_count = users_count.filter(BotMessage.created_at <= end_dt)
+            users_count = users_count.distinct().count()
+            last_activity = db.query(BotMessage.created_at).filter(BotMessage.bot_id == bot.id).order_by(BotMessage.created_at.desc()).limit(1).scalar()
+
+            stats = {
+                "messages": messages_count,
+                "users": users_count,
+                "last_activity": last_activity or (bot.stats.last_activity_at if bot.stats else None),
+                "period": period,
+                "start": start_dt.isoformat() if start_dt else "",
+                "end": end_dt.isoformat() if end_dt else "",
+            }
+
+            return render_template("bot_detail.html", bot=bot, runtime_status=runtime_status, computed_stats=stats)
         finally:
             db.close()
 
@@ -483,7 +545,7 @@ def create_app() -> Flask:
         finally:
             db.close()
 
-    # Simple stats ingestion endpoint for bots
+    # Simple stats ingestion endpoint for bots (legacy increment)
     @app.route("/api/bots/<int:bot_id>/stats/increment", methods=["POST"])
     def api_stats_increment(bot_id: int):
         db = SessionLocal()
@@ -505,6 +567,70 @@ def create_app() -> Flask:
             bot.stats.last_activity_at = datetime.utcnow()
             db.commit()
             return jsonify({"ok": True, "messages": bot.stats.messages_count, "users": bot.stats.users_count})
+        finally:
+            db.close()
+
+    # New ingestion endpoint to store messages
+    @app.route("/api/bots/<int:bot_id>/messages", methods=["POST"])
+    def api_ingest_message(bot_id: int):
+        db = SessionLocal()
+        try:
+            bot = db.get(BotModel, bot_id)
+            if not bot:
+                return jsonify({"error": "not_found"}), 404
+            req_token = request.headers.get("X-Bot-Token") or request.args.get("token")
+            if req_token and req_token != bot.token:
+                return jsonify({"error": "unauthorized"}), 401
+            data = request.get_json(silent=True) or {}
+            msg = BotMessage(
+                bot_id=bot.id,
+                user_id=data.get("user_id"),
+                chat_id=data.get("chat_id"),
+                message_type=(data.get("type") or "text")[:32],
+                text=(data.get("text") or "")[:10000],
+            )
+            db.add(msg)
+            # update last activity mirror in stats for quick view
+            if not bot.stats:
+                bot.stats = BotStats(bot_id=bot.id)
+            bot.stats.last_activity_at = msg.created_at
+            db.commit()
+            return jsonify({"ok": True})
+        finally:
+            db.close()
+
+    # Manual update from Git and optional restart
+    @app.route("/bots/<int:bot_id>/update_repo", methods=["POST"])
+    @login_required
+    def update_repo(bot_id: int):
+        from repo_manager import clone_or_open_repo, pull_latest
+        db = SessionLocal()
+        try:
+            bot = db.get(BotModel, bot_id)
+            if not bot:
+                flash("Бот не найден", "warning")
+                return redirect(url_for("dashboard"))
+            try:
+                repo = clone_or_open_repo(bot.repo_url, bot.workdir, branch=bot.branch)
+                before, after = pull_latest(repo, branch=bot.branch)
+                if before != after:
+                    bot.last_commit = after
+                    if bot.enabled:
+                        if bot.process_pid and is_process_running(bot.process_pid):
+                            stop_bot_process(bot.process_pid)
+                        entrypoint = find_entrypoint(bot.workdir)
+                        pid = start_bot_process(bot.workdir, entrypoint=entrypoint, venv_path=bot.venv_path, log_path=bot.log_path)
+                        bot.process_pid = pid
+                        bot.status = "running"
+                        bot.last_started_at = datetime.utcnow()
+                    db.commit()
+                    flash("Код обновлён из репозитория", "success")
+                else:
+                    flash("Обновлений нет", "info")
+            except Exception as e:
+                db.rollback()
+                flash(f"Ошибка обновления: {e}", "danger")
+            return redirect(url_for("bot_detail", bot_id=bot.id))
         finally:
             db.close()
 
