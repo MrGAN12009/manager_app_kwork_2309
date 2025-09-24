@@ -262,7 +262,19 @@ def create_app() -> Flask:
                 _update_progress(bot_id, steps[9][0], steps[9][1], status="done")
 
                 bot = get_bot(db)
-                bot.status = "stopped"
+                # auto-start bot after setup if enabled
+                try:
+                    entrypoint = find_entrypoint(bot.workdir)
+                    pid = start_bot_process(bot.workdir, entrypoint=entrypoint, venv_path=bot.venv_path, log_path=bot.log_path)
+                    bot.process_pid = pid
+                    bot.status = "running"
+                    bot.last_started_at = datetime.utcnow()
+                    # update activity field for display
+                    if not bot.stats:
+                        bot.stats = BotStats(bot_id=bot.id)
+                    bot.stats.last_activity_at = bot.last_started_at
+                except Exception:
+                    bot.status = "stopped"
                 db.commit()
             except Exception as e:
                 _update_progress(bot_id, 10, f"Ошибка: {e}", status="failed")
@@ -413,6 +425,11 @@ def create_app() -> Flask:
                 users_count = users_count.filter(BotMessage.created_at <= end_dt)
             users_count = users_count.distinct().count()
             last_activity = db.query(BotMessage.created_at).filter(BotMessage.bot_id == bot.id).order_by(BotMessage.created_at.desc()).limit(1).scalar()
+
+            # Fallback to legacy counters for all-time if no messages stored yet
+            if (not start_dt and not end_dt) and messages_count == 0 and bot.stats:
+                messages_count = bot.stats.messages_count or 0
+                users_count = bot.stats.users_count or 0
 
             stats = {
                 "messages": messages_count,
