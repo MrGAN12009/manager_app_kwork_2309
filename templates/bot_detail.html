@@ -60,9 +60,52 @@
         </div>
       </form>
       <div>Сообщений: {{ (computed_stats.messages if computed_stats else (bot.stats.messages_count if bot.stats else 0)) }}</div>
-      <div>Пользователей: {{ (computed_stats.users if computed_stats else (bot.stats.users_count if bot.stats else 0)) }}</div>
-      <div>Активность: {{ (computed_stats.last_activity if computed_stats else (bot.stats.last_activity_at if bot.stats else None)) or '-' }}</div>
+      <div>Уникальные пользователи: {{ (computed_stats.users if computed_stats else (bot.stats.users_count if bot.stats else 0)) }}</div>
+      <div>Среднее сообщений/польз.: {{ '%.2f' % (computed_stats.avg_per_user or 0) }}</div>
+      <div>DAU (24ч): {{ computed_stats.dau or 0 }}</div>
+      <div>WAU (7д): {{ computed_stats.wau or 0 }}</div>
+      <div>Последняя активность: {{ (computed_stats.last_activity if computed_stats else (bot.stats.last_activity_at if bot.stats else None)) or '-' }}</div>
     </div>
   </div>
 </div>
+<div class="row mt-3">
+  <div class="col-12">
+    <div class="card p-3">
+      <h6 class="mb-3">Динамика сообщений ({{ computed_stats.chart_granularity == 'daily' and 'по дням' or 'по неделям' }})</h6>
+      <canvas id="msgsChart" height="120"></canvas>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  (function(){
+    const labels = {{ (computed_stats.chart_labels or [])|tojson }};
+    const values = {{ (computed_stats.chart_values or [])|tojson }};
+    const ctx = document.getElementById('msgsChart').getContext('2d');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Сообщений',
+          data: values,
+          tension: 0.25,
+          borderColor: '#0d6efd',
+          backgroundColor: 'rgba(13,110,253,0.15)',
+          fill: true,
+          pointRadius: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { ticks: { autoSkip: true, maxTicksLimit: 12 } },
+          y: { beginAtZero: true, precision: 0 }
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+  })();
+</script>
 {% endblock %}

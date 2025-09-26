@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, render_template, redirect, url_for, request, flash, jsonify
+from sqlalchemy import func
 from flask_login import LoginManager, login_user, login_required, logout_user, UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from wtforms import StringField, TextAreaField, BooleanField
@@ -432,18 +433,60 @@ def create_app() -> Flask:
             users_count = users_count.distinct().count()
             last_activity = db.query(BotMessage.created_at).filter(BotMessage.bot_id == bot.id).order_by(BotMessage.created_at.desc()).limit(1).scalar()
 
+            # Derived metrics
+            avg_per_user = (messages_count / users_count) if users_count else 0
+
+            # Active users: day/week (DAU/WAU) relative to now
+            dau = db.query(func.count(func.distinct(BotMessage.user_id))).filter(
+                BotMessage.bot_id == bot.id,
+                BotMessage.created_at >= (now - timedelta(days=1))
+            ).scalar() or 0
+            wau = db.query(func.count(func.distinct(BotMessage.user_id))).filter(
+                BotMessage.bot_id == bot.id,
+                BotMessage.created_at >= (now - timedelta(days=7))
+            ).scalar() or 0
+
             # Fallback to legacy counters for all-time if no messages stored yet
             if (not start_dt and not end_dt) and messages_count == 0 and bot.stats:
                 messages_count = bot.stats.messages_count or 0
                 users_count = bot.stats.users_count or 0
 
+            # Build basic trend chart (daily or weekly)
+            # Decide granularity
+            range_start = start_dt or (now - timedelta(days=30))
+            range_end = end_dt or now
+            total_days = max((range_end - range_start).days, 1)
+            granularity = "daily" if total_days <= 35 else "weekly"
+
+            if granularity == "daily":
+                group_label = func.date(BotMessage.created_at)
+            else:
+                # year-week number, SQLite compatible
+                group_label = func.strftime('%Y-%W', BotMessage.created_at)
+
+            gq = db.query(group_label.label("bucket"), func.count().label("cnt")).filter(BotMessage.bot_id == bot.id)
+            if start_dt:
+                gq = gq.filter(BotMessage.created_at >= start_dt)
+            if end_dt:
+                gq = gq.filter(BotMessage.created_at <= end_dt)
+            gq = gq.group_by("bucket").order_by("bucket")
+            rows = gq.all()
+            chart_labels = [r.bucket for r in rows]
+            chart_values = [r.cnt for r in rows]
+
             stats = {
                 "messages": messages_count,
                 "users": users_count,
                 "last_activity": last_activity or (bot.stats.last_activity_at if bot.stats else None),
+                "avg_per_user": avg_per_user,
+                "dau": dau,
+                "wau": wau,
                 "period": period,
                 "start": start_dt.isoformat() if start_dt else "",
                 "end": end_dt.isoformat() if end_dt else "",
+                "chart_labels": chart_labels,
+                "chart_values": chart_values,
+                "chart_granularity": granularity,
             }
 
             return render_template("bot_detail.html", bot=bot, runtime_status=runtime_status, computed_stats=stats)
