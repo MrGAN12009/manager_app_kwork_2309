@@ -76,12 +76,18 @@
     </div>
   </div>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script type="application/json" id="chart-data-labels">{{ (computed_stats.chart_labels or [])|tojson }}</script>
+<script type="application/json" id="chart-data-values">{{ (computed_stats.chart_values or [])|tojson }}</script>
 <script>
   (function(){
-    const labels = {{ (computed_stats.chart_labels or [])|tojson }};
-    const values = {{ (computed_stats.chart_values or [])|tojson }};
-    const ctx = document.getElementById('msgsChart').getContext('2d');
+    const labelsEl = document.getElementById('chart-data-labels');
+    const valuesEl = document.getElementById('chart-data-values');
+    const labels = labelsEl ? JSON.parse(labelsEl.textContent || '[]') : [];
+    const values = valuesEl ? JSON.parse(valuesEl.textContent || '[]') : [];
+    const canvas = document.getElementById('msgsChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
     new Chart(ctx, {
       type: 'line',
       data: {
@@ -103,7 +109,8 @@
           x: { ticks: { autoSkip: true, maxTicksLimit: 12 } },
           y: { beginAtZero: true, precision: 0 }
         },
-        plugins: { legend: { display: false } }
+        plugins: { legend: { display: false } },
+        animation: false
       }
     });
   })();

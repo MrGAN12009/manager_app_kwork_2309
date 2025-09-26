@@ -464,11 +464,12 @@ def create_app() -> Flask:
                 # year-week number, SQLite compatible
                 group_label = func.strftime('%Y-%W', BotMessage.created_at)
 
-            gq = db.query(group_label.label("bucket"), func.count().label("cnt")).filter(BotMessage.bot_id == bot.id)
-            if start_dt:
-                gq = gq.filter(BotMessage.created_at >= start_dt)
-            if end_dt:
-                gq = gq.filter(BotMessage.created_at <= end_dt)
+            # Always bound chart aggregation by computed range_start/range_end to avoid scanning entire history
+            gq = db.query(group_label.label("bucket"), func.count().label("cnt")).filter(
+                BotMessage.bot_id == bot.id,
+                BotMessage.created_at >= range_start,
+                BotMessage.created_at <= range_end,
+            )
             gq = gq.group_by("bucket").order_by("bucket")
             rows = gq.all()
             chart_labels = [r.bucket for r in rows]
